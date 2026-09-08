@@ -218,7 +218,7 @@ def test_add_bookmark_auto_defaults(home, cached_chapter):
     out = asyncio_run(svc.add_bookmark_auto(BOOK_ID, CHAPTER_UID, "语言是一门技术"))
     assert out["range"] == "0-7"
     call = fake.bm_calls[0]
-    assert call["color_style"] == 5 and call["style"] == 1  # 默认签名样式：黄波浪
+    assert call["color_style"] == 5 and call["style"] == 2  # 默认签名样式：黄波浪
     assert out["bookmark"]["bookmarkId"] == f"{BOOK_ID}_{CHAPTER_UID}_0-7"
 
 

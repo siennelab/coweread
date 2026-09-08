@@ -281,11 +281,11 @@ class CowereadService:
 
     async def add_bookmark_auto(
         self, book_id: str, chapter_uid, abstract: str,
-        color_style: int = 5, style: int = 1,
+        color_style: int = 5, style: int = 2,
     ) -> dict:
         """划线：自动算 range，匹配失败拒划（绝不划错位置）。
 
-        默认 colorStyle=5 + style=1（黄波浪，AI 签名线）；返回 bookmarkId 可用于改样式/删除。
+        默认 colorStyle=5 + style=2（黄波浪，AI 签名线）；返回 bookmarkId 可用于改样式/删除。
         """
         rec = await self.get_chapter_text(book_id, chapter_uid)
         hit = find_range_in_co_index([tuple(p) for p in rec["coIndex"]], abstract)

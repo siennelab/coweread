@@ -134,12 +134,12 @@ class WereadClient:
         range_str: str,
         mark_text: str,
         color_style: int = 5,
-        style: int = 1,
+        style: int = 2,
         type_: int = 1,
     ) -> dict:
         """划一条线。markText 内部做 Base64（UTF-8）——官方端点要求，明文直发会 400。
 
-        colorStyle: 1红 2紫 3蓝 4绿 5黄（0/6/7 无效）；style: 0直线 1波浪 2荧光笔。
+        colorStyle: 1红 2紫 3蓝 4绿 5黄（0/6/7 无效）；style: 0直线 1荧光笔 2波浪（3 无效不渲染）。
         回包 {bookmarkId}，即 f"{bookId}_{chapterUid}_{range}"。
         """
         payload = {

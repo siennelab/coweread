@@ -143,10 +143,10 @@ async def add_comment(review_id: str, content: str, reply_comment_id: str = "") 
 @mcp.tool()
 async def add_bookmark(
     book_id: str, chapter_uid: str, abstract: str,
-    color_style: str = "5", style: str = "1",
+    color_style: str = "5", style: str = "2",
 ) -> str:
     """划线：abstract 必须逐字摘自该章原文（自动算 range，匹配失败拒绝划线）。
-    colorStyle: 1红 2紫 3蓝 4绿 5黄；style: 0直线 1波浪 2荧光笔。默认 5+1 黄波浪。
+    colorStyle: 1红 2紫 3蓝 4绿 5黄；style: 0直线 1荧光笔 2波浪（3 无效）。默认 5+2 黄波浪。
     返回 bookmarkId，改样式/删除时用它。
     """
     try:
@@ -161,7 +161,7 @@ async def update_bookmark_style(
     bookmark_id: str, color_style: str = "", style: str = ""
 ) -> str:
     """改已有划线的样式（bookmarkId 来自 add_bookmark 的返回）。
-    只传想改的字段：colorStyle: 1红 2紫 3蓝 4绿 5黄；style: 0直线 1波浪 2荧光笔。
+    只传想改的字段：colorStyle: 1红 2紫 3蓝 4绿 5黄；style: 0直线 1荧光笔 2波浪（3 无效）。
     """
     try:
         return _ok(await (await _service()).update_bookmark_style(
