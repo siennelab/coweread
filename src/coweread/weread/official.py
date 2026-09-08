@@ -4,8 +4,8 @@
 一律优先走官方 API——官方鉴权（wrk key）、稳定、不经浏览器；
 Playwright/cookie 通道只留给官方做不到的事（原文抓取、写想法）。
 
-api_name 与参数拼写参照 D:\\software\\weread-mcp\\server.py（用户已验证可用），
-注意 /review/list/mine 用小写 bookid（server.py:1380 已验证）。
+api_name 与参数拼写参照微信读书官方 Skills 约定（weread-mcp 同款接口），
+注意 /review/list/mine 用小写 bookid（实测）。
 官方 Skill 升级返回 errcode 99 / upgrade_info 时需同步 SKILL_VERSION。
 """
 
@@ -44,7 +44,7 @@ class OfficialClient:
         key = api_key or os.environ.get("WEREAD_API_KEY", "")
         if not key:
             raise RuntimeError(
-                "缺少 WEREAD_API_KEY：请在 coweread/.env 或环境变量中配置（获取方式见 weread-mcp 部署文档）"
+                "缺少 WEREAD_API_KEY：请在 coweread/.env 或环境变量中配置（获取方式：微信读书官方 https://weread.qq.com/r/weread-skills ）"
             )
         self._http = httpx.AsyncClient(
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
