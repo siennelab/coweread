@@ -140,7 +140,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--token", default="", help="HTTP 模式的 Bearer token（强烈建议设置）")
     p.set_defaults(func=cmd_mcp)
 
+    p = sub.add_parser("serve", help="启动 REST API（FastAPI）")
+    p.add_argument("--host", default="127.0.0.1", help="监听地址（默认 127.0.0.1）")
+    p.add_argument("--port", type=int, default=8480, help="端口（默认 8480）")
+    p.set_defaults(func=lambda a: _cmd_serve(a))
+
     return parser
+
+
+def _cmd_serve(args) -> int:
+    from .server.api import serve
+
+    return serve(host=args.host, port=args.port)
 
 
 def main(argv: list[str] | None = None) -> int:

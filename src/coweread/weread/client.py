@@ -10,6 +10,7 @@ TODO(M0): 抓包确认 body 编码（json vs form）与额外字段。
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -122,7 +123,55 @@ class WereadClient:
         payload: dict = {"reviewId": review_id, "content": content}
         if reply_comment_id:
             payload["commentId"] = reply_comment_id
-        r = self._http.post("/web/review/comment", json=payload)
+        return self._post_checked("/web/review/comment", payload, "comment")
+
+    # ---- 划线（2026-09-05 实测 /web/book/*；样式编号表见 docs/TECHNICAL.md）----
+
+    def add_bookmark(
+        self,
+        book_id: str,
+        chapter_uid: int,
+        range_str: str,
+        mark_text: str,
+        color_style: int = 5,
+        style: int = 1,
+        type_: int = 1,
+    ) -> dict:
+        """划一条线。markText 内部做 Base64（UTF-8）——官方端点要求，明文直发会 400。
+
+        colorStyle: 1红 2紫 3蓝 4绿 5黄（0/6/7 无效）；style: 0直线 1波浪 2荧光笔。
+        回包 {bookmarkId}，即 f"{bookId}_{chapterUid}_{range}"。
+        """
+        payload = {
+            "bookId": str(book_id),
+            "chapterUid": chapter_uid,
+            "range": range_str,
+            "markText": base64.b64encode(mark_text.encode("utf-8")).decode("ascii"),
+            "colorStyle": color_style,
+            "style": style,
+            "type": type_,
+        }
+        return self._post_checked("/web/book/addBookmark", payload, "addBookmark")
+
+    def update_bookmark(
+        self, bookmark_id: str, color_style: int | None = None, style: int | None = None
+    ) -> dict:
+        """改已有划线样式（端点存在但未真发实测，参数形状与 addBookmark 同名）。"""
+        payload: dict = {"bookmarkId": bookmark_id}
+        if color_style is not None:
+            payload["colorStyle"] = color_style
+        if style is not None:
+            payload["style"] = style
+        return self._post_checked("/web/book/updateBookmark", payload, "updateBookmark")
+
+    def remove_bookmark(self, bookmark_id: str) -> dict:
+        """删划线。回包 {succ:1}。"""
+        return self._post_checked(
+            "/web/book/removeBookmark", {"bookmarkId": bookmark_id}, "removeBookmark"
+        )
+
+    def _post_checked(self, path: str, payload: dict, what: str) -> dict:
+        r = self._http.post(path, json=payload)
         r.raise_for_status()
         data = r.json()
         err = data.get("errCode", 0)
@@ -132,5 +181,5 @@ class WereadClient:
                 raise RuntimeError(
                     f"微信读书登录态已过期（errCode {err} {msg}）：请运行 coweread login 重新扫码"
                 )
-            raise RuntimeError(f"comment 失败：errCode={err} {msg}")
+            raise RuntimeError(f"{what} 失败：errCode={err} {msg}")
         return data

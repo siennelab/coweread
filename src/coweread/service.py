@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from .weread.official import OfficialClient
 from .weread.reader import ReaderSession
 
 CHAPTER_TIMEOUT_S = 25.0
-SIGN = "🌕 "  # AI 批注署名，便于在人机混排的想法/评论里区分与筛选
+SIGN = "🌕 "  # AI 批注署名默认值；可用 .env 的 COWEREAD_SIGN 覆盖（留空=不加署名）
 
 
 class ServiceError(RuntimeError):
@@ -33,8 +34,19 @@ def _norm(s: str) -> str:
 
 
 class CowereadService:
-    def __init__(self, official: OfficialClient | None = None):
+    def __init__(
+        self,
+        official: OfficialClient | None = None,
+        sign: str | None = None,
+    ):
+        # OfficialClient() 会 load_dotenv，先构造再读环境变量才能拿到 .env 里的 COWEREAD_SIGN
         self._official = official or OfficialClient()
+        self._sign = os.environ.get("COWEREAD_SIGN", SIGN) if sign is None else sign
+
+    def _signed(self, content: str, sign: bool) -> str:
+        if sign and self._sign:
+            return f"{self._sign}{content}"
+        return content
 
     async def __aenter__(self) -> "CowereadService":
         return self
@@ -212,7 +224,7 @@ class CowereadService:
     ) -> dict:
         """写想法：自动算 range；abstract 匹配失败即报错，绝不硬发错位坐标。
 
-        sign=True（默认）在 content 前加 🌕 署名。
+        sign=True（默认）在 content 前加 AI 署名（默认 🌕，可自定义）。
         """
         rec = await self.get_chapter_text(book_id, chapter_uid)
         hit = find_range_in_co_index([tuple(p) for p in rec["coIndex"]], abstract)
@@ -220,8 +232,7 @@ class CowereadService:
             raise ServiceError(
                 f"abstract 未在《{rec['title'][:20]}…》原文中逐字命中，拒绝写入：{abstract[:40]!r}…"
             )
-        if sign:
-            content = f"{SIGN}{content}"
+        content = self._signed(content, sign)
 
         def _do(client: WereadClient) -> dict:
             return client.add_review(
@@ -236,9 +247,8 @@ class CowereadService:
         self, book_id: str, chapter_uid, content: str,
         is_private: int = 1, sign: bool = True,
     ) -> dict:
-        """章节级想法（range "0-0"，无 abstract）；sign=True 加 🌕 署名。"""
-        if sign:
-            content = f"{SIGN}{content}"
+        """章节级想法（range "0-0"，无 abstract）；sign=True 加 AI 署名。"""
+        content = self._signed(content, sign)
 
         def _do(client: WereadClient) -> dict:
             return client.add_review(
@@ -259,14 +269,51 @@ class CowereadService:
     ) -> dict:
         """发评论；reply_comment_id 为"回复某条评论"（引用模式）。
 
-        sign=True（默认）在 content 前加 🌕 署名，与想法一致。
+        sign=True（默认）在 content 前加 AI 署名，与想法一致。
         """
-        if sign:
-            content = f"{SIGN}{content}"
+        content = self._signed(content, sign)
         resp = await self._run_write(
             lambda c: c.add_comment(review_id, content, reply_comment_id)
         )
         return {"commentId": resp.get("commentId"), "content": content}
+
+    # ---- 划线写通道（/web/book/*，样式编号表见 docs/TECHNICAL.md）----
+
+    async def add_bookmark_auto(
+        self, book_id: str, chapter_uid, abstract: str,
+        color_style: int = 5, style: int = 1,
+    ) -> dict:
+        """划线：自动算 range，匹配失败拒划（绝不划错位置）。
+
+        默认 colorStyle=5 + style=1（黄波浪，AI 签名线）；返回 bookmarkId 可用于改样式/删除。
+        """
+        rec = await self.get_chapter_text(book_id, chapter_uid)
+        hit = find_range_in_co_index([tuple(p) for p in rec["coIndex"]], abstract)
+        if hit is None:
+            raise ServiceError(
+                f"abstract 未在《{rec['title'][:20]}…》原文中逐字命中，拒绝划线：{abstract[:40]!r}…"
+            )
+
+        def _do(client: WereadClient) -> dict:
+            return client.add_bookmark(
+                book_id, int(chapter_uid), hit, abstract,
+                color_style=color_style, style=style,
+            )
+
+        resp = await self._run_write(_do)
+        return {"range": hit, "title": rec["title"], "bookmark": resp}
+
+    async def update_bookmark_style(
+        self, bookmark_id: str, color_style: int | None = None, style: int | None = None
+    ) -> dict:
+        """改已有划线的样式（端点未真发实测过，失败会显式报错）。"""
+        return await self._run_write(
+            lambda c: c.update_bookmark(bookmark_id, color_style=color_style, style=style)
+        )
+
+    async def remove_bookmark(self, bookmark_id: str) -> dict:
+        """删划线。"""
+        return await self._run_write(lambda c: c.remove_bookmark(bookmark_id))
 
     # ---- AI 共读进度书签（本地，与微信读书真实进度严格分开）----
 

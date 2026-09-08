@@ -10,6 +10,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "mcp[cli]>=1.2,<2",
     "uvicorn>=0.52.4",
+    "fastapi>=0.141.1",
 ]
 
 [project.scripts]

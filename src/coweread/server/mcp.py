@@ -20,8 +20,8 @@ mcp = FastMCP(
     instructions=(
         "微信读书人机共读工具层。查询走官方稳定通道；章节明文 + data-wr-co 坐标走"
         "本地通道；写想法自动定位 range（abstract 必须逐字摘自原文，匹配失败会拒绝写入）。"
-        "AI 写入的批注与评论默认带 🌕 署名。reading_context 仅是便捷打包，"
-        "不要当作读书的默认上下文。"
+        "AI 写入的想法/评论默认带署名（默认 🌕，环境变量 COWEREAD_SIGN 可自定义）。"
+        "reading_context 仅是便捷打包，不要当作读书的默认上下文。"
     ),
 )
 
@@ -136,6 +136,48 @@ async def add_comment(review_id: str, content: str, reply_comment_id: str = "") 
     try:
         return _ok(await (await _service()).add_review_comment(
             review_id, content, reply_comment_id or None))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def add_bookmark(
+    book_id: str, chapter_uid: str, abstract: str,
+    color_style: str = "5", style: str = "1",
+) -> str:
+    """划线：abstract 必须逐字摘自该章原文（自动算 range，匹配失败拒绝划线）。
+    colorStyle: 1红 2紫 3蓝 4绿 5黄；style: 0直线 1波浪 2荧光笔。默认 5+1 黄波浪。
+    返回 bookmarkId，改样式/删除时用它。
+    """
+    try:
+        return _ok(await (await _service()).add_bookmark_auto(
+            book_id, chapter_uid, abstract, int(color_style), int(style)))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def update_bookmark_style(
+    bookmark_id: str, color_style: str = "", style: str = ""
+) -> str:
+    """改已有划线的样式（bookmarkId 来自 add_bookmark 的返回）。
+    只传想改的字段：colorStyle: 1红 2紫 3蓝 4绿 5黄；style: 0直线 1波浪 2荧光笔。
+    """
+    try:
+        return _ok(await (await _service()).update_bookmark_style(
+            bookmark_id,
+            int(color_style) if color_style else None,
+            int(style) if style else None,
+        ))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def remove_bookmark(bookmark_id: str) -> str:
+    """删除划线。"""
+    try:
+        return _ok(await (await _service()).remove_bookmark(bookmark_id))
     except Exception as e:
         return _err(e)
 

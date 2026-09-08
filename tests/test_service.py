@@ -44,6 +44,25 @@ class FakeWriteClient:
                                        reply_comment_id=reply_comment_id))
         return {"commentId": "r_c2"}
 
+    def add_bookmark(self, book_id, chapter_uid, range_str, mark_text,
+                     color_style=5, style=1, type_=1):
+        self.bm_calls = getattr(self, "bm_calls", [])
+        self.bm_calls.append(dict(book_id=book_id, chapter_uid=chapter_uid,
+                                  range_str=range_str, mark_text=mark_text,
+                                  color_style=color_style, style=style))
+        return {"errCode": 0, "bookmarkId": f"{book_id}_{chapter_uid}_{range_str}"}
+
+    def update_bookmark(self, bookmark_id, color_style=None, style=None):
+        self.bm_upd = getattr(self, "bm_upd", [])
+        self.bm_upd.append(dict(bookmark_id=bookmark_id,
+                                color_style=color_style, style=style))
+        return {"errCode": 0, "succ": 1}
+
+    def remove_bookmark(self, bookmark_id):
+        self.bm_rm = getattr(self, "bm_rm", [])
+        self.bm_rm.append(bookmark_id)
+        return {"errCode": 0, "succ": 1}
+
     def close(self):
         pass
 
@@ -190,6 +209,61 @@ def test_write_auto_renew_on_skey_expired(home, cached_chapter):
     assert out["review"]["reviewId"] == "ok"
     assert renewed["count"] == 1
     assert not clients  # 只重试一次
+
+
+def test_add_bookmark_auto_defaults(home, cached_chapter):
+    svc = _make_service()
+    fake = FakeWriteClient()
+    svc._write_client = lambda: fake
+    out = asyncio_run(svc.add_bookmark_auto(BOOK_ID, CHAPTER_UID, "语言是一门技术"))
+    assert out["range"] == "0-7"
+    call = fake.bm_calls[0]
+    assert call["color_style"] == 5 and call["style"] == 1  # 默认签名样式：黄波浪
+    assert out["bookmark"]["bookmarkId"] == f"{BOOK_ID}_{CHAPTER_UID}_0-7"
+
+
+def test_add_bookmark_auto_rejects_mismatch(home, cached_chapter):
+    svc = _make_service()
+    fake = FakeWriteClient()
+    svc._write_client = lambda: fake
+    with pytest.raises(ServiceError, match="拒绝划线"):
+        asyncio_run(svc.add_bookmark_auto(BOOK_ID, CHAPTER_UID, "原文里没有这句"))
+    assert not hasattr(fake, "bm_calls")
+
+
+def test_bookmark_update_and_remove(home, cached_chapter):
+    svc = _make_service()
+    fake = FakeWriteClient()
+    svc._write_client = lambda: fake
+    asyncio_run(svc.update_bookmark_style("bm_1", color_style=3))
+    assert fake.bm_upd[0] == {"bookmark_id": "bm_1", "color_style": 3, "style": None}
+    asyncio_run(svc.remove_bookmark("bm_1"))
+    assert fake.bm_rm == ["bm_1"]
+
+
+def test_custom_sign_via_ctor(home, cached_chapter):
+    svc = CowereadService(official=_DummyOfficial(), sign="[AI] ")
+    fake = FakeWriteClient()
+    svc._write_client = lambda: fake
+    asyncio_run(svc.add_review_auto(BOOK_ID, CHAPTER_UID, "语言是一门技术", "有道理"))
+    assert fake.calls[0]["content"] == "[AI] 有道理"
+
+
+def test_empty_sign_no_prefix(home, cached_chapter):
+    svc = CowereadService(official=_DummyOfficial(), sign="")
+    fake = FakeWriteClient()
+    svc._write_client = lambda: fake
+    out = asyncio_run(svc.add_review_comment("r_1", "无署名"))
+    assert out["content"] == "无署名"
+
+
+def test_sign_env_override(home, cached_chapter, monkeypatch):
+    monkeypatch.setenv("COWEREAD_SIGN", "✍ ")
+    svc = _make_service()
+    fake = FakeWriteClient()
+    svc._write_client = lambda: fake
+    asyncio_run(svc.add_review_auto(BOOK_ID, CHAPTER_UID, "语言是一门技术", "x"))
+    assert fake.calls[0]["content"] == "✍ x"
 
 
 def test_write_raises_other_errors_immediately(home, cached_chapter):
