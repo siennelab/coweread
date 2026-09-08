@@ -344,3 +344,16 @@ class CowereadService:
         data[str(book_id)] = entry
         p.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
         return entry
+
+    async def last_reader_bookmark(self) -> dict | None:
+        """最近更新的共读书签:全部书签里 updatedAt 最新的一本,并入 bookId 返回。"""
+        p = self._bookmark_path()
+        if not p.exists():
+            return None
+        data = json.loads(p.read_text("utf-8"))
+        if not data:
+            return None
+        book_id = max(data, key=lambda bid: data[bid].get("updatedAt", ""))
+        entry = dict(data[book_id])
+        entry["bookId"] = str(book_id)
+        return entry

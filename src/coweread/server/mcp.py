@@ -203,6 +203,17 @@ async def set_reader_bookmark(book_id: str, chapter_uid: str, chapter_idx: str =
 
 
 @mcp.tool()
+async def resume_reading() -> str:
+    """上次共读到哪：取本地 AI 共读书签里最近更新的一本（bookId/chapterUid/chapterIdx），
+    新一轮共读开场直接续上；与用户真实进度无关。还没有任何书签时 data 为 null。
+    """
+    try:
+        return _ok(await (await _service()).last_reader_bookmark())
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
 async def reading_context(book_id: str, chapter_uid: str) -> str:
     """便捷打包：真实进度 + 共读书签 + 章节明文 + 该章已有想法 + 热门划线。
     仅作便捷工具，绝不作为读书的默认上下文——上下文组织归调用方/前端关注。

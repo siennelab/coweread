@@ -161,6 +161,31 @@ def test_reader_bookmark_roundtrip(home):
     assert BOOK_ID in all_bookmarks
 
 
+def _write_bookmarks(home, data):
+    p = paths.state_dir() / "reader_bookmark.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False), "utf-8")
+
+
+def test_last_reader_bookmark_picks_newest(home):
+    _write_bookmarks(home, {
+        "26454161": {"chapterUid": 11, "chapterIdx": 11, "updatedAt": "2026-08-31T00:57:05"},
+        "99999999": {"chapterUid": 3, "chapterIdx": 3, "updatedAt": "2026-09-05T10:00:00"},
+    })
+    svc = _make_service()
+    got = asyncio_run(svc.last_reader_bookmark())
+    assert got["bookId"] == "99999999"
+    assert got["chapterUid"] == 3
+    assert got["updatedAt"] == "2026-09-05T10:00:00"
+
+
+def test_last_reader_bookmark_none_when_empty(home):
+    svc = _make_service()
+    assert asyncio_run(svc.last_reader_bookmark()) is None  # 文件不存在
+    _write_bookmarks(home, {})
+    assert asyncio_run(svc.last_reader_bookmark()) is None  # 空 dict
+
+
 def test_review_comments(home, cached_chapter):
     svc = _make_service()
     fake = FakeWriteClient()

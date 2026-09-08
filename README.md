@@ -155,7 +155,7 @@ uv run coweread dump-chapter "https://weread.qq.com/web/reader/<encodeId>"
 
 Windows 下可直接双击仓库里的 `login.bat` / `serve.bat`(已处理控制台编码)。
 
-### MCP(供 AI 调用,16 个工具)
+### MCP(供 AI 调用,17 个工具)
 
 | 分组 | 工具 | 说明 |
 | --- | --- | --- |
@@ -167,6 +167,7 @@ Windows 下可直接双击仓库里的 `login.bat` / `serve.bat`(已处理控制
 | 划线 | `add_bookmark` / `update_bookmark_style` / `remove_bookmark` | 划线增改删;默认 `colorStyle=5, style=2`(黄波浪) |
 | 防重 | `my_reviews(book_id)` / `best_bookmarks(book_id, chapter_uid?)` | 已有想法 / 热门划线,写前防重复、取素材 |
 | 进度 | `get_reader_bookmark` / `set_reader_bookmark` | AI 自己的共读进度(本地,与真人进度无关) |
+| 进度 | `resume_reading` | 上次共读到哪:取最近更新的一本(bookId+章定位),开场直接续读 |
 | 打包 | `reading_context(book_id, chapter_uid)` | 一次打包:进度+书签+明文+已有想法+热门划线(便捷用,不作默认上下文) |
 
 划线样式编号(手机端实测):颜色 `colorStyle` = 1红 / 2紫 / 3蓝 / 4绿 / 5黄(0/6/7 无效);线型 `style` = 0直线 / 1荧光笔 / 2波浪(3 无效)。
@@ -179,7 +180,7 @@ Windows 下可直接双击仓库里的 `login.bat` / `serve.bat`(已处理控制
 4. `add_review(bookId, chapterUid, abstract, content)` → 想法自动挂在正确句子;
 5. `set_reader_bookmark(bookId, chapterUid)` → 记住 AI 读到哪(与真人进度分开)。
 
-### REST API(16 个能力)
+### REST API(17 个能力)
 
 | 方法 | 端点 | 说明 |
 | --- | --- | --- |
@@ -197,6 +198,7 @@ Windows 下可直接双击仓库里的 `login.bat` / `serve.bat`(已处理控制
 | PATCH | `/api/bookmark/{bookmark_id}` | 改划线样式 |
 | DELETE | `/api/bookmark/{bookmark_id}` | 删划线 |
 | GET/POST | `/api/reader_bookmark` | 读/记 AI 共读进度 |
+| GET | `/api/resume_reading` | 上次共读到哪(最近更新的一本,便于续读) |
 | GET | `/api/reading_context/{book_id}/{chapter_uid}` | 便捷打包 |
 
 设置 `COWEREAD_API_TOKEN` 后,请求需带 `Authorization: Bearer <token>`(否则 401)。示例:

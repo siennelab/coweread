@@ -219,6 +219,14 @@ async def set_reader_bookmark(
     return {"ok": True, "data": data}
 
 
+@app.get("/api/resume_reading")
+async def resume_reading(authorization: str | None = Header(default=None)) -> dict:
+    """最近更新的一本 AI 共读书签（bookId/chapterUid/chapterIdx），便于续读；无书签返回 data=null。"""
+    _guard(authorization)
+    data = await (await _service()).last_reader_bookmark()
+    return {"ok": True, "data": data}
+
+
 @app.get("/api/reading_context/{book_id}/{chapter_uid}")
 async def reading_context(
     book_id: str, chapter_uid: str,
