@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 登录态、密钥与本地缓存，绝不入库
+state/
+cache/
+.env
+
+# 内部工作文档与素材（含个人工作流/第三方内容），不随仓库发布
+plan.md
+HANDOFF.md
+COLLAB.md
+weread-range-explained.md
+图片/
+scripts/
