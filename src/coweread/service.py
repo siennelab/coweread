@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -22,7 +21,6 @@ from .weread.official import OfficialClient
 from .weread.reader import ReaderSession
 
 CHAPTER_TIMEOUT_S = 25.0
-SIGN = "🌕 "  # AI 批注署名默认值；可用 .env 的 COWEREAD_SIGN 覆盖（留空=不加署名）
 
 
 class ServiceError(RuntimeError):
@@ -39,14 +37,9 @@ class CowereadService:
         official: OfficialClient | None = None,
         sign: str | None = None,
     ):
-        # OfficialClient() 会 load_dotenv，先构造再读环境变量才能拿到 .env 里的 COWEREAD_SIGN
         self._official = official or OfficialClient()
-        self._sign = os.environ.get("COWEREAD_SIGN", SIGN) if sign is None else sign
-
-    def _signed(self, content: str, sign: bool) -> str:
-        if sign and self._sign:
-            return f"{self._sign}{content}"
-        return content
+        # 兼容旧调用签名；署名已改由调用方直接写入 content。
+        _ = sign
 
     async def __aenter__(self) -> "CowereadService":
         return self
@@ -71,11 +64,14 @@ class CowereadService:
     async def my_reviews(self, book_id: str) -> list[dict]:
         return await self._official.my_reviews(book_id)
 
+    async def my_bookmarks(self, book_id: str) -> list[dict]:
+        return await self._official.bookmarks(book_id)
+
     async def best_bookmarks(self, book_id: str, chapter_uid: int = 0) -> list[dict]:
         return await self._official.best_bookmarks(book_id, chapter_uid)
 
     async def reading_context(self, book_id: str, chapter_uid) -> dict:
-        """便捷打包：真实进度 + 共读书签 + 章节明文 + 该章已有想法 + 热门划线。
+        """便捷打包：真实进度 + 共读书签 + 章节明文 + 该章已有想法 + 该章个人划线 + 热门划线。
 
         仅作便捷工具，绝不作为读书的默认上下文——上下文如何组织属于前端/gateway 侧。
         """
@@ -85,6 +81,10 @@ class CowereadService:
             r for r in await self.my_reviews(book_id)
             if str(r.get("chapterUid")) == str(chapter_uid)
         ]
+        bookmarks = [
+            b for b in await self.my_bookmarks(book_id)
+            if str(b.get("chapterUid")) == str(chapter_uid)
+        ]
         return {
             "bookId": book_id,
             "chapterUid": chapter_uid,
@@ -92,6 +92,7 @@ class CowereadService:
             "readerBookmark": await self.get_reader_bookmark(book_id),
             "chapter": chapter,
             "myReviewsInChapter": reviews,
+            "myBookmarksInChapter": bookmarks,
             "bestBookmarks": await self.best_bookmarks(book_id, int(chapter_uid)),
         }
 
@@ -224,7 +225,7 @@ class CowereadService:
     ) -> dict:
         """写想法：自动算 range；abstract 匹配失败即报错，绝不硬发错位坐标。
 
-        sign=True（默认）在 content 前加 AI 署名（默认 🌕，可自定义）。
+        content 原样写入；sign 参数仅为兼容旧调用保留，不再改变内容。
         """
         rec = await self.get_chapter_text(book_id, chapter_uid)
         hit = find_range_in_co_index([tuple(p) for p in rec["coIndex"]], abstract)
@@ -232,8 +233,6 @@ class CowereadService:
             raise ServiceError(
                 f"abstract 未在《{rec['title'][:20]}…》原文中逐字命中，拒绝写入：{abstract[:40]!r}…"
             )
-        content = self._signed(content, sign)
-
         def _do(client: WereadClient) -> dict:
             return client.add_review(
                 book_id, int(chapter_uid), content,
@@ -247,8 +246,7 @@ class CowereadService:
         self, book_id: str, chapter_uid, content: str,
         is_private: int = 1, sign: bool = True,
     ) -> dict:
-        """章节级想法（range "0-0"，无 abstract）；sign=True 加 AI 署名。"""
-        content = self._signed(content, sign)
+        """章节级想法（range "0-0"，无 abstract）；content 原样写入。"""
 
         def _do(client: WereadClient) -> dict:
             return client.add_review(
@@ -269,9 +267,8 @@ class CowereadService:
     ) -> dict:
         """发评论；reply_comment_id 为"回复某条评论"（引用模式）。
 
-        sign=True（默认）在 content 前加 AI 署名，与想法一致。
+        content 原样写入；sign 参数仅为兼容旧调用保留，不再改变内容。
         """
-        content = self._signed(content, sign)
         resp = await self._run_write(
             lambda c: c.add_comment(review_id, content, reply_comment_id)
         )

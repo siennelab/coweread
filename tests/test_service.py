@@ -5,11 +5,13 @@
 """
 
 import json
+from unittest.mock import Mock
 
 import pytest
 
 from coweread import paths
 from coweread.service import CowereadService, ServiceError
+from coweread.weread.official import OfficialClient
 
 TEXT = "语言是一门技术，一门我们必须发明的技术"
 BOOK_ID = "26454161"
@@ -101,6 +103,47 @@ def _make_service() -> CowereadService:
     return CowereadService(official=_DummyOfficial())
 
 
+def test_my_bookmarks():
+    official = Mock(spec=OfficialClient)
+    bookmarks = [
+        {"chapterUid": CHAPTER_UID, "range": "0-7", "markText": "本章划线"},
+        {"chapterUid": 12, "range": "8-12", "markText": "下一章划线"},
+    ]
+    official.bookmarks.return_value = bookmarks
+    svc = CowereadService(official=official)
+
+    assert asyncio_run(svc.my_bookmarks(BOOK_ID)) == bookmarks
+    official.bookmarks.assert_awaited_once_with(BOOK_ID)
+
+
+def test_reading_context_selects_chapter_bookmarks_and_reviews(cached_chapter):
+    official = Mock(spec=OfficialClient)
+    chapter_bookmarks = [
+        {"chapterUid": CHAPTER_UID, "range": "0-7", "markText": "第一条划线"},
+        {"chapterUid": str(CHAPTER_UID), "range": "8-12", "markText": "第二条划线"},
+    ]
+    chapter_review = {"chapterUid": CHAPTER_UID, "content": "本章想法"}
+    popular_bookmarks = [{"chapterUid": CHAPTER_UID, "markText": "热门划线"}]
+    official.bookmarks.return_value = [
+        {"chapterUid": 12, "markText": "下一章划线"},
+        *chapter_bookmarks,
+    ]
+    official.my_reviews.return_value = [
+        chapter_review,
+        {"chapterUid": 12, "content": "下一章想法"},
+    ]
+    official.best_bookmarks.return_value = popular_bookmarks
+    official.progress.return_value = {"chapterUid": CHAPTER_UID, "progress": 50}
+    svc = CowereadService(official=official)
+
+    context = asyncio_run(svc.reading_context(BOOK_ID, str(CHAPTER_UID)))
+
+    assert context["myBookmarksInChapter"] == chapter_bookmarks
+    assert context["myReviewsInChapter"] == [chapter_review]
+    assert context["bestBookmarks"] == popular_bookmarks
+    official.best_bookmarks.assert_awaited_once_with(BOOK_ID, CHAPTER_UID)
+
+
 def test_get_chapter_text_cache_hit(home, cached_chapter):
     svc = _make_service()
     out = asyncio_run(svc.get_chapter_text(BOOK_ID, CHAPTER_UID))
@@ -127,7 +170,7 @@ def test_add_review_auto_success(home, cached_chapter):
     call = fake.calls[0]
     assert call["range_str"] == "0-7"
     assert call["abstract"] == "语言是一门技术"
-    assert call["content"] == "🌕 有道理"
+    assert call["content"] == "有道理"
     assert call["is_private"] == 1
 
 
@@ -195,7 +238,7 @@ def test_review_comments(home, cached_chapter):
         "26454161_8bTest", "看到了", reply_comment_id="r_c1"))
     assert out["commentId"] == "r_c2"
     call = fake.comment_calls[0]
-    assert call["content"] == "🌕 看到了"
+    assert call["content"] == "看到了"
     assert call["reply_comment_id"] == "r_c1"
 
     plain = asyncio_run(svc.add_review_comment("26454161_8bTest", "不带署名", sign=False))
@@ -266,29 +309,17 @@ def test_bookmark_update_and_remove(home, cached_chapter):
     assert fake.bm_rm == ["bm_1"]
 
 
-def test_custom_sign_via_ctor(home, cached_chapter):
+def test_server_never_modifies_content_signature(home, cached_chapter, monkeypatch):
+    monkeypatch.setenv("COWEREAD_SIGN", "✍ ")
     svc = CowereadService(official=_DummyOfficial(), sign="[AI] ")
     fake = FakeWriteClient()
     svc._write_client = lambda: fake
     asyncio_run(svc.add_review_auto(BOOK_ID, CHAPTER_UID, "语言是一门技术", "有道理"))
-    assert fake.calls[0]["content"] == "[AI] 有道理"
-
-
-def test_empty_sign_no_prefix(home, cached_chapter):
-    svc = CowereadService(official=_DummyOfficial(), sign="")
-    fake = FakeWriteClient()
-    svc._write_client = lambda: fake
-    out = asyncio_run(svc.add_review_comment("r_1", "无署名"))
-    assert out["content"] == "无署名"
-
-
-def test_sign_env_override(home, cached_chapter, monkeypatch):
-    monkeypatch.setenv("COWEREAD_SIGN", "✍ ")
-    svc = _make_service()
-    fake = FakeWriteClient()
-    svc._write_client = lambda: fake
-    asyncio_run(svc.add_review_auto(BOOK_ID, CHAPTER_UID, "语言是一门技术", "x"))
-    assert fake.calls[0]["content"] == "✍ x"
+    asyncio_run(svc.add_chapter_review(BOOK_ID, CHAPTER_UID, "章节想法"))
+    out = asyncio_run(svc.add_review_comment("r_1", "评论"))
+    assert [call["content"] for call in fake.calls] == ["有道理", "章节想法"]
+    assert fake.comment_calls[0]["content"] == "评论"
+    assert out["content"] == "评论"
 
 
 def test_write_raises_other_errors_immediately(home, cached_chapter):

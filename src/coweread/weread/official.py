@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from ..paths import base_dir
 
 GATEWAY_URL = "https://i.weread.qq.com/api/agent/gateway"
-SKILL_VERSION = "1.0.4"  # 2026-08-28 官方升级（upgrade_info.latest_version）；过期时官方返回 errcode 99
+SKILL_VERSION = "1.0.6"  # 与官方 skills/SKILL.md version 对齐；过期时官方网关返回 upgrade_info
 
 
 class OfficialError(RuntimeError):

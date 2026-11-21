@@ -12,15 +12,34 @@ import json
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from ..service import CowereadService, ServiceError
 
 mcp = FastMCP(
     name="coweread 共读",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            "127.0.0.1:*",
+            "localhost:*",
+            "[::1]:*",
+            "weread.ke-den.de",
+            "weread.ke-den.de:*",
+        ],
+        allowed_origins=[
+            "http://127.0.0.1:*",
+            "http://localhost:*",
+            "http://[::1]:*",
+            "https://chatgpt.com",
+            "https://chat.openai.com",
+        ],
+    ),
     instructions=(
         "微信读书人机共读工具层。查询走官方稳定通道；章节明文 + data-wr-co 坐标走"
         "本地通道；写想法自动定位 range（abstract 必须逐字摘自原文，匹配失败会拒绝写入）。"
-        "AI 写入的想法/评论默认带署名（默认 🌕，环境变量 COWEREAD_SIGN 可自定义）。"
+        "本服务供多个 AI 共用；写想法/评论时，调用方须自行在 content 开头添加署名："
+        "Gale 用“🌕 Gale：”，逸用“逸：”，凌用“凌：”。"
         "reading_context 仅是便捷打包，不要当作读书的默认上下文。"
     ),
 )
@@ -83,8 +102,9 @@ async def get_chapter_text(book_id: str, chapter_uid: str, refresh: bool = False
 
 @mcp.tool()
 async def add_review(book_id: str, chapter_uid: str, abstract: str, content: str) -> str:
-    """写想法：abstract 必须逐字摘自该章原文（自动算 range，匹配失败拒绝写入）；
-    content 前会自动加 🌕 署名。章节级想法用 add_chapter_review。
+    """写想法（多 AI 共用）：abstract 必须逐字摘自该章原文（自动算 range，匹配失败拒绝写入）。
+    调用方须自行在 content 开头添加署名；约定 Gale「🌕 Gale：」、逸「逸：」、凌「凌：」。
+    章节级想法用 add_chapter_review。
     """
     try:
         return _ok(await (await _service()).add_review_auto(book_id, chapter_uid, abstract, content))
@@ -94,7 +114,9 @@ async def add_review(book_id: str, chapter_uid: str, abstract: str, content: str
 
 @mcp.tool()
 async def add_chapter_review(book_id: str, chapter_uid: str, content: str) -> str:
-    """章节级想法（挂在整章上，无原文引用），content 前自动加 🌕 署名。"""
+    """章节级想法（多 AI 共用；挂在整章上，无原文引用）。
+    调用方须自行在 content 开头添加署名；约定 Gale「🌕 Gale：」、逸「逸：」、凌「凌：」。
+    """
     try:
         return _ok(await (await _service()).add_chapter_review(book_id, chapter_uid, content))
     except Exception as e:
@@ -106,6 +128,15 @@ async def my_reviews(book_id: str) -> str:
     """自己在此书的全部想法（写前防重复、延续语气）。"""
     try:
         return _ok(await (await _service()).my_reviews(book_id))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def my_bookmarks(book_id: str) -> str:
+    """读取自己在此书的全部划线/高亮。"""
+    try:
+        return _ok(await (await _service()).my_bookmarks(book_id))
     except Exception as e:
         return _err(e)
 
@@ -130,7 +161,8 @@ async def list_comments(review_id: str) -> str:
 
 @mcp.tool()
 async def add_comment(review_id: str, content: str, reply_comment_id: str = "") -> str:
-    """在想法下发评论，content 前自动加 🌕 署名。
+    """在想法下发评论（多 AI 共用）。
+    调用方须自行在 content 开头添加署名；约定 Gale「🌕 Gale：」、逸「逸：」、凌「凌：」。
     reply_comment_id 非空即"回复某条评论"（引用模式；微信读书评论无嵌套楼层）。
     """
     try:
@@ -215,7 +247,7 @@ async def resume_reading() -> str:
 
 @mcp.tool()
 async def reading_context(book_id: str, chapter_uid: str) -> str:
-    """便捷打包：真实进度 + 共读书签 + 章节明文 + 该章已有想法 + 热门划线。
+    """便捷打包：真实进度 + 共读书签 + 章节明文 + 该章已有想法 + 该章个人划线 + 热门划线。
     仅作便捷工具，绝不作为读书的默认上下文——上下文组织归调用方/前端关注。
     """
     try:
